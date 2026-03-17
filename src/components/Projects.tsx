@@ -1,7 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { FolderGit2, Cpu, Cloud, MoveRight, Layers, LayoutTemplate } from "lucide-react";
+import { FolderGit2, Cpu, Cloud, Layers, LayoutTemplate, MessageCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 
 const projects = [
   {
@@ -39,6 +41,21 @@ const projects = [
 ];
 
 export default function Projects() {
+  const [highlightedId, setHighlightedId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const handleHighlight = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string; type: string }>;
+      if (customEvent.detail.type === "project") {
+        setHighlightedId(Number.parseInt(customEvent.detail.id));
+        setTimeout(() => setHighlightedId(null), 3000); // Clear highlight after 3s
+      }
+    };
+
+    globalThis.addEventListener("highlight-item", handleHighlight);
+    return () => globalThis.removeEventListener("highlight-item", handleHighlight);
+  }, []);
+
   return (
     <section id="projects" className="py-24 relative max-w-5xl mx-auto px-6">
       <div className="mb-16">
@@ -58,10 +75,17 @@ export default function Projects() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-50px" }}
             transition={{ delay: index * 0.1 }}
-            className="bento-card group flex flex-col h-full relative overflow-hidden"
+            className={cn(
+               "bento-card group flex flex-col h-full relative overflow-hidden transition-all duration-500",
+               highlightedId === project.id ? "ring-2 ring-blue-500 bg-blue-500/10 shadow-[0_0_30px_rgba(59,130,246,0.3)] scale-[1.02]" : ""
+            )}
           >
             {/* Subtle Gradient Overlay */}
-            <div className={`absolute -top-32 -right-32 w-64 h-64 bg-gradient-to-bl ${project.color} rounded-full blur-[60px] opacity-0 group-hover:opacity-100 transition-opacity duration-700`} />
+            <div className={cn(
+              "absolute -top-32 -right-32 w-64 h-64 bg-linear-to-bl",
+              project.color,
+              "rounded-full blur-[60px] opacity-0 group-hover:opacity-100 transition-opacity duration-700"
+            )} />
             
             <div className="mb-6 flex items-center justify-between">
               <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-2xl group-hover:border-zinc-700 transition-colors">
@@ -71,7 +95,7 @@ export default function Projects() {
             </div>
 
             <h3 className="text-xl font-bold text-zinc-100 mb-3">{project.title}</h3>
-            <p className="text-zinc-400 text-sm mb-8 flex-grow leading-relaxed">
+            <p className="text-zinc-400 text-sm mb-8 grow leading-relaxed">
               {project.description}
             </p>
 
@@ -87,7 +111,30 @@ export default function Projects() {
             </div>
             
             {/* Hover indicator line */}
-            <div className="absolute bottom-0 left-0 h-1 bg-gradient-to-r from-blue-500 to-cyan-400 w-0 group-hover:w-full transition-all duration-500 ease-out" />
+            <div className="absolute bottom-0 left-0 h-1 bg-linear-to-r from-blue-500 to-cyan-400 w-0 group-hover:w-full transition-all duration-500 ease-out" />
+            
+            {/* Ask Bot Button */}
+            <div className="absolute top-4 right-12 opacity-0 group-hover:opacity-100 transition-opacity">
+               <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    globalThis.dispatchEvent(
+                      new CustomEvent("ask-bot", {
+                        detail: `Tell me more about the project: ${project.title}.`,
+                      })
+                    );
+                    globalThis.dispatchEvent(
+                      new CustomEvent("highlight-item", {
+                        detail: { id: project.id.toString(), type: "project" },
+                      })
+                    );
+                  }}
+                  className="p-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded-full border border-blue-500/20 transition-all"
+                  title="Ask about this project"
+               >
+                 <MessageCircle className="w-4 h-4" />
+               </button>
+            </div>
           </motion.div>
         ))}
       </div>

@@ -1,20 +1,25 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useMemo,
+  useCallback,
+} from "react";
 import {
-  MessageCircle,
   X,
   Send,
   User,
   Bot,
-  Loader2,
   MinusCircle,
   Trash2,
   Download,
+  Sparkles,
+  ArrowRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { cn } from "@/lib/utils";
 import {
   loadChatHistory,
   saveChatHistory,
@@ -22,28 +27,63 @@ import {
   exportChatHistory,
   type Message,
 } from "@/lib/chat-storage";
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
-
-// Local Message interface is now imported from @/lib/chat-storage
-
-const SUGGESTED_QUESTIONS = [
-  "What are your top skills?",
-  "Tell me about your experience at Dutch-Bangla Bank.",
-  "Which projects have you worked on?",
-  "Where did you graduate from?",
-];
-
 import { checkSessionLimit, recordMessage } from "@/lib/rate-limit";
 
-// Constants for rate limiting (ideally these would be NEXT_PUBLIC_ env vars)
+const SECTION_QUESTIONS: Record<string, string[]> = {
+  hero: [
+    "What are your top skills?",
+    "Tell me about your background.",
+    "What kind of roles are you looking for?",
+    "How can I contact you?",
+  ],
+  experience: [
+    "Tell me about your work at Dutch-Bangla Bank.",
+    "What did you do at BJIT Limited?",
+    "What is your experience with AI applications?",
+    "Tell me about your backend engineering experience.",
+  ],
+  skills: [
+    "What are your favorite technologies?",
+    "Tell me about your experience with Java and Spring Boot.",
+    "How proficient are you with Python and LLMs?",
+    "Show me projects using React and Next.js.",
+  ],
+  projects: [
+    "Tell me more about your AI statement extractor.",
+    "What was the most challenging project you worked on?",
+    "Show me your cloud-native implementations.",
+    "Do you have experience with Oracle databases?",
+  ],
+  education: [
+    "Where did you graduate from?",
+    "What was your major in university?",
+    "Tell me about your academic achievements.",
+  ],
+};
+
+const DEFAULT_QUESTIONS = [
+  "What are your top skills?",
+  "Tell me about your experience.",
+  "Which projects have you worked on?",
+  "How can I hire you?",
+];
+
+interface ChatbotProps {
+  isInline?: boolean;
+  activeSection?: string;
+  onNavigate?: (id: string) => void;
+}
+
+// Constants for rate limiting
 const MAX_MESSAGES = 20;
 const WINDOW_HOURS = 1;
 const COOLDOWN_SECONDS = 5;
 
-export default function Chatbot() {
+export default function Chatbot({
+  isInline = false,
+  activeSection = "hero",
+  onNavigate,
+}: Readonly<ChatbotProps>) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -52,13 +92,121 @@ export default function Chatbot() {
   const [error, setError] = useState<string | null>(null);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
-  // Load chat history on mount
+  // Rate limiting state
+  const [remaining, setRemaining] = useState(MAX_MESSAGES);
+  const [cooldown, setCooldown] = useState(0);
+  const [isBlocked, setIsBlocked] = useState(false);
+
+  const placeholderText = useMemo(() => {
+    if (isBlocked) return "Limit reached...";
+    if (cooldown > 0) return `Wait ${cooldown}s...`;
+    return "Type a message...";
+  }, [isBlocked, cooldown]);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  const handleSend = useCallback(
+    async (text: string = input) => {
+      if (!text.trim() || isLoading) return;
+
+      const limitCheck = checkSessionLimit(
+        MAX_MESSAGES,
+        WINDOW_HOURS,
+        COOLDOWN_SECONDS,
+      );
+      if (!limitCheck.allowed) {
+        if (limitCheck.reason === "cooldown") {
+          setError(
+            `Please wait ${limitCheck.cooldownSeconds} seconds before your next message.`,
+          );
+        } else {
+          setError(
+            "You've reached your message limit. Please try again later or email me at arafath.yeasin1019@gmail.com",
+          );
+        }
+        return;
+      }
+
+      const userMessage: Message = { role: "user", content: text };
+      setMessages((prev) => [...prev, userMessage]);
+      setInput("");
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: [...messages, userMessage],
+            context: { activeSection }, // Pass context to AI
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to get response");
+        }
+
+        const data = await response.json();
+        const assistantMessage: Message = {
+          role: "assistant",
+          content: data.message.content,
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+
+        recordMessage();
+        const updatedLimit = checkSessionLimit(
+          MAX_MESSAGES,
+          WINDOW_HOURS,
+          COOLDOWN_SECONDS,
+        );
+        setRemaining(updatedLimit.remaining);
+      } catch (err: unknown) {
+        console.error("Chat error:", err);
+        const errorMessage =
+          err instanceof Error
+            ? err.message
+            : "Something went wrong. Please check your API key.";
+        setError(errorMessage);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [input, isLoading, messages, activeSection],
+  );
+
+  // Load chat history ONCE on mount
   useEffect(() => {
     const history = loadChatHistory();
     if (history.length > 0) {
       setMessages(history);
     }
-  }, []);
+
+    if (isInline) {
+      setIsOpen(true);
+    }
+  }, [isInline]); // Runs on mount and if isInline changes
+
+  // 'ask-bot' Event Listener
+  useEffect(() => {
+    const handleAskBot = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      if (customEvent.detail) {
+        handleSend(customEvent.detail);
+        if (!isInline) setIsOpen(true);
+      }
+    };
+
+    globalThis.addEventListener("ask-bot", handleAskBot);
+    return () => globalThis.removeEventListener("ask-bot", handleAskBot);
+  }, [isInline, handleSend]);
 
   // Save chat history whenever messages change
   useEffect(() => {
@@ -67,20 +215,88 @@ export default function Chatbot() {
     }
   }, [messages]);
 
-  // Rate limiting state
-  const [remaining, setRemaining] = useState(MAX_MESSAGES);
-  const [cooldown, setCooldown] = useState(0);
-  const [isBlocked, setIsBlocked] = useState(false);
+  useEffect(() => {
+    const lastMessage = messages.at(-1);
+    if (lastMessage?.role === "assistant" && !isLoading) {
+      const content = lastMessage.content.toLowerCase();
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+      // Experience Highlights
+      if (
+        content.includes("dutch-bangla") ||
+        content.includes("senior officer")
+      ) {
+        globalThis.dispatchEvent(
+          new CustomEvent("highlight-item", {
+            detail: { id: "1", type: "experience" },
+          }),
+        );
+      } else if (
+        content.includes("bjit") ||
+        content.includes("software engineer")
+      ) {
+        globalThis.dispatchEvent(
+          new CustomEvent("highlight-item", {
+            detail: { id: "2", type: "experience" },
+          }),
+        );
+      }
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+      // Project Highlights
+      if (
+        content.includes("document data extraction") ||
+        content.includes("ai document")
+      ) {
+        globalThis.dispatchEvent(
+          new CustomEvent("highlight-item", {
+            detail: { id: "1", type: "project" },
+          }),
+        );
+      } else if (content.includes("aws") || content.includes("serverless")) {
+        globalThis.dispatchEvent(
+          new CustomEvent("highlight-item", {
+            detail: { id: "2", type: "project" },
+          }),
+        );
+      } else if (
+        content.includes("microservices") ||
+        content.includes("banking system")
+      ) {
+        globalThis.dispatchEvent(
+          new CustomEvent("highlight-item", {
+            detail: { id: "3", type: "project" },
+          }),
+        );
+      } else if (
+        content.includes("portfolio") ||
+        content.includes("dashboard")
+      ) {
+        globalThis.dispatchEvent(
+          new CustomEvent("highlight-item", {
+            detail: { id: "4", type: "project" },
+          }),
+        );
+      }
+
+      // Skill Highlights
+      if (content.includes("ai & data") || content.includes("llm")) {
+        globalThis.dispatchEvent(
+          new CustomEvent("highlight-item", {
+            detail: { id: "ai", type: "skill" },
+          }),
+        );
+      } else if (content.includes("frontend") || content.includes("react")) {
+        globalThis.dispatchEvent(
+          new CustomEvent("highlight-item", {
+            detail: { id: "frontend", type: "skill" },
+          }),
+        );
+      }
+    }
+  }, [messages, isLoading]);
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isLoading]);
+  }, [messages, isLoading, scrollToBottom]);
 
   // Initial and periodic limit check
   useEffect(() => {
@@ -110,82 +326,6 @@ export default function Chatbot() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleSend = async (text: string = input) => {
-    if (!text.trim() || isLoading) return;
-
-    // Client-side rate limit check before sending
-    const limitCheck = checkSessionLimit(
-      MAX_MESSAGES,
-      WINDOW_HOURS,
-      COOLDOWN_SECONDS,
-    );
-    if (!limitCheck.allowed) {
-      if (limitCheck.reason === "cooldown") {
-        setError(
-          `Please wait ${limitCheck.cooldownSeconds} seconds before your next message.`,
-        );
-      } else {
-        setError(
-          "You've reached your message limit. Please try again later or email me at arafath.yeasin1019@gmail.com",
-        );
-      }
-      return;
-    }
-
-    const userMessage: Message = { role: "user", content: text };
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages: [...messages, userMessage],
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to get response");
-      }
-
-      const data = await response.json();
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: data.message.content,
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-
-      // Record successful message
-      recordMessage();
-      const updatedLimit = checkSessionLimit(
-        MAX_MESSAGES,
-        WINDOW_HOURS,
-        COOLDOWN_SECONDS,
-      );
-      setRemaining(updatedLimit.remaining);
-    } catch (err: unknown) {
-      console.error("Chat error:", err);
-      const errorMessage =
-        err instanceof Error
-          ? err.message
-          : "Something went wrong. Please check your API key.";
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const toggleChat = () => {
-    setIsOpen(!isOpen);
-    setIsMinimized(false);
-  };
-
   const handleClearChat = () => {
     setShowConfirmDelete(true);
   };
@@ -200,262 +340,326 @@ export default function Chatbot() {
     exportChatHistory(messages);
   };
 
+  const currentSuggestions = useMemo(() => {
+    return SECTION_QUESTIONS[activeSection] || DEFAULT_QUESTIONS;
+  }, [activeSection]);
+
+  const chatContainer = (
+    <div
+      className={cn(
+        "flex flex-col h-full overflow-hidden transition-all duration-300 relative",
+        !isInline &&
+          "bg-zinc-950/90 border border-zinc-800 shadow-2xl rounded-2xl",
+        !isInline && isMinimized
+          ? "h-14 w-64"
+          : !isInline && "h-[500px] w-[350px] md:w-[400px] backdrop-blur-xl",
+      )}
+    >
+      {/* Header */}
+      <div
+        className={cn(
+          "p-4 border-b border-zinc-800 flex items-center justify-between",
+          isInline ? "bg-zinc-900/30" : "bg-zinc-900/50",
+        )}
+      >
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <div className="w-10 h-10 rounded-full bg-blue-600/20 flex items-center justify-center border border-blue-500/20">
+              <Bot className="text-blue-500" size={20} />
+            </div>
+            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-zinc-900" />
+          </div>
+          <div className="flex flex-col">
+            <span className="font-bold text-zinc-100 text-sm tracking-tight">
+              Yeasin&apos;s AI Assistant
+            </span>
+            <span className="text-[10px] text-zinc-500 flex items-center gap-1">
+              <Sparkles size={10} className="text-blue-400" />
+              {remaining} questions left
+            </span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleExportChat}
+            disabled={messages.length === 0}
+            title="Export Chat"
+            className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 disabled:opacity-30"
+          >
+            <Download size={16} />
+          </button>
+          <button
+            onClick={handleClearChat}
+            disabled={messages.length === 0}
+            title="Clear Chat"
+            className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 disabled:opacity-30"
+          >
+            <Trash2 size={16} />
+          </button>
+          {!isInline && (
+            <>
+              <button
+                onClick={() => setIsMinimized(!isMinimized)}
+                className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400"
+              >
+                <MinusCircle size={18} />
+              </button>
+              <button
+                onClick={() => setIsOpen(false)}
+                className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400"
+              >
+                <X size={18} />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {showConfirmDelete && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="absolute inset-0 z-110 flex items-center justify-center p-6 bg-zinc-950/80 backdrop-blur-md"
+          >
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl w-full max-w-[280px] text-center">
+              <div className="bg-red-500/10 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 className="text-red-500" size={24} />
+              </div>
+              <h3 className="text-zinc-100 font-semibold mb-2">Clear Chat?</h3>
+              <p className="text-zinc-400 text-xs mb-6">
+                All messages will be permanently deleted.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowConfirmDelete(false)}
+                  className="flex-1 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="flex-1 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-zinc-100 text-sm font-medium transition-all"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {(!isMinimized || isInline) && (
+        <>
+          {/* Messages Area */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth custom-scrollbar">
+            {messages.length === 0 && (
+              <div className="space-y-6 py-4">
+                <div className="text-center">
+                  <div className="bg-blue-600/10 w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4 rotate-3 border border-blue-500/10">
+                    <Bot className="text-blue-500" size={32} />
+                  </div>
+                  <h2 className="text-zinc-100 font-bold text-xl mb-2 tracking-tight">
+                    Welcome!
+                  </h2>
+                  <p className="text-zinc-400 text-sm px-8 leading-relaxed">
+                    I&apos;m an AI trained on Yeasin&apos;s professional
+                    background. How can I help you today?
+                  </p>
+                </div>
+
+                <div className="grid gap-2 pt-4">
+                  <p className="text-[10px] uppercase tracking-widest text-zinc-600 font-bold px-1 flex items-center gap-2">
+                    <ArrowRight size={10} /> Suggested for you
+                  </p>
+                  {currentSuggestions.map((q, i) => (
+                    <button
+                      key={`${q}-${i}`}
+                      onClick={() => handleSend(q)}
+                      disabled={isBlocked || cooldown > 0}
+                      className="group text-sm p-3 rounded-2xl border border-zinc-800/50 bg-zinc-900/30 text-zinc-400 hover:text-zinc-100 hover:border-blue-500/30 hover:bg-blue-500/5 transition-all text-left flex items-start gap-3"
+                    >
+                      <Sparkles
+                        size={14}
+                        className="text-blue-500/30 group-hover:text-blue-400 shrink-0 mt-0.5"
+                      />
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {messages.map((m, i) => (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                key={`${m.role}-${i}`}
+                className={cn(
+                  "flex gap-3 text-sm",
+                  m.role === "user" ? "flex-row-reverse" : "flex-row",
+                )}
+              >
+                <div
+                  className={cn(
+                    "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border",
+                    m.role === "user"
+                      ? "bg-zinc-800 border-zinc-700"
+                      : "bg-blue-600/10 text-blue-500 border-blue-500/20",
+                  )}
+                >
+                  {m.role === "user" ? <User size={14} /> : <Bot size={14} />}
+                </div>
+                <div
+                  className={cn(
+                    "max-w-[85%] p-3.5 rounded-2xl shadow-sm leading-relaxed",
+                    m.role === "user"
+                      ? "bg-blue-600 text-white rounded-tr-none"
+                      : "bg-zinc-900 text-zinc-200 border border-zinc-800 rounded-tl-none",
+                  )}
+                >
+                  <p className="whitespace-pre-wrap">{m.content}</p>
+                </div>
+              </motion.div>
+            ))}
+
+            {isLoading && (
+              <div className="flex gap-3">
+                <div className="w-8 h-8 rounded-xl bg-blue-600/10 flex items-center justify-center shrink-0 border border-blue-500/20">
+                  <Bot className="text-blue-500 animate-pulse" size={14} />
+                </div>
+                <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl rounded-tl-none">
+                  <div className="flex gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce [animation-delay:0.2s]" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-bounce [animation-delay:0.4s]" />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div className="bg-red-500/5 border border-red-500/10 p-4 rounded-2xl text-red-400 text-xs text-center space-y-2">
+                <p>{error}</p>
+                {isBlocked && (
+                  <a
+                    href="mailto:arafath.yeasin1019@gmail.com"
+                    className="inline-block underline font-bold hover:text-red-300 transition-colors"
+                  >
+                    Contact via Email
+                  </a>
+                )}
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Context-aware suggestions bar */}
+          {messages.length > 0 && !isLoading && (
+            <div className="px-4 pb-2">
+              <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar scroll-smooth">
+                {currentSuggestions.slice(0, 3).map((q, i) => (
+                  <button
+                    key={`mini-${q}-${i}`}
+                    onClick={() => handleSend(q)}
+                    disabled={isBlocked || cooldown > 0}
+                    className="whitespace-nowrap text-[11px] px-3 py-1.5 rounded-full border border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:text-blue-400 hover:border-blue-500/30 transition-all shadow-sm"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Input Area */}
+          <div
+            className={cn(
+              "p-4 border-t border-zinc-800 bg-zinc-950/50 mt-auto",
+              isInline && "pb-6 md:pb-4",
+            )}
+          >
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSend();
+              }}
+              className="relative flex items-center"
+            >
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={placeholderText}
+                disabled={isBlocked || cooldown > 0}
+                className="w-full bg-zinc-900/80 border border-zinc-800 rounded-2xl pl-12 pr-14 py-3 text-sm text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-zinc-600 disabled:opacity-50"
+              />
+              <div className="absolute left-4 text-zinc-500">
+                <Bot size={18} />
+              </div>
+              <button
+                type="submit"
+                disabled={
+                  isLoading || !input.trim() || isBlocked || cooldown > 0
+                }
+                className="absolute right-2 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-800 disabled:text-zinc-500 text-white p-2 rounded-xl transition-all shadow-lg shadow-blue-500/20"
+              >
+                {cooldown > 0 ? (
+                  <span className="text-[10px] font-bold">{cooldown}</span>
+                ) : (
+                  <Send size={18} />
+                )}
+              </button>
+            </form>
+
+            {/* Quick Navigation Toggle */}
+            {isInline && onNavigate && (
+              <div className="mt-4 flex flex-wrap gap-2 justify-center opacity-60 hover:opacity-100 transition-opacity">
+                <p className="w-full text-[9px] text-center text-zinc-600 uppercase tracking-widest font-bold mb-1">
+                  Quick Jump
+                </p>
+                {["projects", "experience", "skills"].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => onNavigate(s)}
+                    className={cn(
+                      "text-[10px] px-2 py-1 rounded-md border transition-all capitalize",
+                      activeSection === s
+                        ? "border-blue-500/50 bg-blue-500/10 text-blue-400"
+                        : "border-zinc-800 bg-zinc-900/30 text-zinc-500 hover:text-zinc-300",
+                    )}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  if (isInline) {
+    return chatContainer;
+  }
+
   return (
-    <div className="fixed bottom-6 right-6 z-[100] font-sans">
+    <div className="fixed bottom-6 right-6 z-100 font-sans">
       <AnimatePresence>
         {isOpen && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className={cn(
-              "bg-zinc-950/90 border border-zinc-800 shadow-2xl rounded-2xl overflow-hidden flex flex-col mb-4 transition-all duration-300",
-              isMinimized
-                ? "h-14 w-64"
-                : "h-[500px] w-[350px] md:w-[400px] backdrop-blur-xl",
-            )}
+            className="mb-4"
           >
-            {/* Header */}
-            <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                <div className="flex flex-col">
-                  <span className="font-semibold text-zinc-100 text-sm">
-                    Ask Yeasin AI
-                  </span>
-                  <span className="text-[10px] text-zinc-500">
-                    {remaining} messages left
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={handleExportChat}
-                  disabled={messages.length === 0}
-                  title="Export Chat"
-                  className="p-1 hover:bg-zinc-800 rounded-md transition-colors text-zinc-400 disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  <Download size={16} />
-                </button>
-                <button
-                  onClick={handleClearChat}
-                  disabled={messages.length === 0}
-                  title="Clear Chat"
-                  className="p-1 hover:bg-zinc-800 rounded-md transition-colors text-zinc-400 disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  <Trash2 size={16} />
-                </button>
-                <button
-                  onClick={() => setIsMinimized(!isMinimized)}
-                  className="p-1 hover:bg-zinc-800 rounded-md transition-colors text-zinc-400"
-                >
-                  <MinusCircle size={18} />
-                </button>
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="p-1 hover:bg-zinc-800 rounded-md transition-colors text-zinc-400"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-
-            <AnimatePresence>
-              {showConfirmDelete && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="absolute inset-0 z-[110] flex items-center justify-center p-6 bg-zinc-950/80 backdrop-blur-md"
-                >
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl w-full max-w-[280px] text-center">
-                    <div className="bg-red-500/10 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Trash2 className="text-red-500" size={24} />
-                    </div>
-                    <h3 className="text-zinc-100 font-semibold mb-2">
-                      Clear Chat History?
-                    </h3>
-                    <p className="text-zinc-400 text-xs mb-6">
-                      This action cannot be undone. All your messages will be
-                      permanently deleted.
-                    </p>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => setShowConfirmDelete(false)}
-                        className="flex-1 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={confirmDelete}
-                        className="flex-1 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-zinc-100 text-sm font-medium transition-colors"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {!isMinimized && (
-              <>
-                {/* Messages area */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
-                  {messages.length === 0 && (
-                    <div className="text-center py-8">
-                      <div className="bg-blue-500/10 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <Bot className="text-blue-500" size={24} />
-                      </div>
-                      <p className="text-zinc-300 font-medium mb-1 text-sm">
-                        Hi! I&apos;m Yeasin&apos;s AI assistant.
-                      </p>
-                      <p className="text-zinc-500 text-xs">
-                        Ask me anything about his skills, experience, or
-                        projects.
-                      </p>
-
-                      <div className="mt-6 flex flex-wrap gap-2 justify-center">
-                        {SUGGESTED_QUESTIONS.map((q, i) => (
-                          <button
-                            key={`${q}-${i}`}
-                            onClick={() => handleSend(q)}
-                            disabled={isBlocked || cooldown > 0}
-                            className="text-[11px] px-3 py-1.5 rounded-full border border-zinc-700 bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-left"
-                          >
-                            {q}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {messages.map((m, i) => (
-                    <div
-                      key={`${m.role}-${i}`}
-                      className={cn(
-                        "flex gap-3 text-sm",
-                        m.role === "user" ? "flex-row-reverse" : "flex-row",
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-                          m.role === "user"
-                            ? "bg-zinc-800"
-                            : "bg-blue-600/20 text-blue-500",
-                        )}
-                      >
-                        {m.role === "user" ? (
-                          <User size={14} />
-                        ) : (
-                          <Bot size={14} />
-                        )}
-                      </div>
-                      <div
-                        className={cn(
-                          "max-w-[80%] p-3 rounded-2xl",
-                          m.role === "user"
-                            ? "bg-blue-600 text-white rounded-tr-none"
-                            : "bg-zinc-900 text-zinc-200 border border-zinc-800 rounded-tl-none",
-                        )}
-                      >
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                          {m.content}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-
-                  {isLoading && (
-                    <div className="flex gap-3 animate-pulse">
-                      <div className="w-8 h-8 rounded-full bg-blue-600/20 flex items-center justify-center shrink-0">
-                        <Bot className="text-blue-500" size={14} />
-                      </div>
-                      <div className="bg-zinc-900 border border-zinc-800 p-3 rounded-2xl rounded-tl-none">
-                        <Loader2
-                          className="animate-spin text-zinc-500"
-                          size={16}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {error && (
-                    <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-lg text-red-500 text-xs text-center flex flex-col gap-2">
-                      <span>{error}</span>
-                      {isBlocked && (
-                        <a
-                          href="mailto:arafath.yeasin1019@gmail.com"
-                          className="underline font-semibold hover:text-red-400 transition-colors"
-                        >
-                          Send me an email instead
-                        </a>
-                      )}
-                    </div>
-                  )}
-                  <div ref={messagesEndRef} />
-                </div>
-
-                {/* Input area */}
-                <div className="p-4 border-t border-zinc-800 bg-zinc-950/50">
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      handleSend();
-                    }}
-                    className="flex gap-2"
-                  >
-                    {(() => {
-                      let placeholder = "Type a message...";
-                      if (isBlocked) placeholder = "Limit reached...";
-                      else if (cooldown > 0)
-                        placeholder = `Wait ${cooldown}s...`;
-                      return (
-                        <input
-                          type="text"
-                          value={input}
-                          onChange={(e) => setInput(e.target.value)}
-                          placeholder={placeholder}
-                          disabled={isBlocked || cooldown > 0}
-                          className="flex-1 bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500/50 placeholder:text-zinc-600 disabled:opacity-50"
-                        />
-                      );
-                    })()}
-                    <button
-                      type="submit"
-                      disabled={
-                        isLoading || !input.trim() || isBlocked || cooldown > 0
-                      }
-                      className="bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 rounded-xl transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center min-w-10"
-                    >
-                      {cooldown > 0 ? (
-                        <span className="text-xs font-bold">{cooldown}</span>
-                      ) : (
-                        <Send size={18} />
-                      )}
-                    </button>
-                  </form>
-                </div>
-              </>
-            )}
+            {chatContainer}
           </motion.div>
         )}
       </AnimatePresence>
-
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={toggleChat}
-        className={cn(
-          "w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300",
-          isOpen
-            ? "bg-zinc-800 text-zinc-400 rotate-90"
-            : "bg-blue-600 text-white",
-        )}
-      >
-        {isOpen ? <X size={28} /> : <MessageCircle size={28} />}
-      </motion.button>
     </div>
   );
 }

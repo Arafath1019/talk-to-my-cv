@@ -1,7 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Briefcase, Calendar, ChevronRight } from "lucide-react";
+import { Briefcase, Calendar, MessageCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 
 const experiences = [
   {
@@ -52,6 +54,21 @@ const experiences = [
 ];
 
 export default function Experience() {
+  const [highlightedId, setHighlightedId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const handleHighlight = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string; type: string }>;
+      if (customEvent.detail.type === "experience") {
+        setHighlightedId(parseInt(customEvent.detail.id));
+        setTimeout(() => setHighlightedId(null), 3000); // Clear highlight after 3s
+      }
+    };
+
+    globalThis.addEventListener("highlight-item", handleHighlight);
+    return () => globalThis.removeEventListener("highlight-item", handleHighlight);
+  }, []);
+
   return (
     <section id="experience" className="py-24 relative max-w-5xl mx-auto px-6">
       <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-blue-500/5 rounded-full blur-[100px] -z-10" />
@@ -89,10 +106,12 @@ export default function Experience() {
               {/* Timeline Dot */}
               <div className="absolute -left-[41px] md:left-1/2 md:-translate-x-1/2 mt-1.5 md:mt-0 w-5 h-5 rounded-full border-4 border-[#09090b] bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)] z-10" />
 
-              {/* Content Card */}
               <div className={`flex-1 w-full ${index % 2 === 0 ? "md:text-right" : ""}`}>
-                <div className="bento-card relative overflow-hidden group">
-                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className={cn(
+                  "bento-card relative overflow-hidden group transition-all duration-500",
+                  highlightedId === exp.id ? "ring-2 ring-blue-500 bg-blue-500/10 shadow-[0_0_30px_rgba(59,130,246,0.3)] scale-[1.02]" : ""
+                )}>
+                  <div className="absolute inset-0 bg-linear-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   
                   <div className={`flex items-center gap-2 text-blue-400 text-sm font-medium mb-3 ${index % 2 === 0 ? "md:justify-end" : ""}`}>
                     <Calendar className="w-4 h-4" />
@@ -107,15 +126,26 @@ export default function Experience() {
                   
                   <p className="text-zinc-400 mb-6">{exp.description}</p>
                   
-                  <ul className={`space-y-3 ${index % 2 === 0 ? "md:flex md:flex-col md:items-end" : ""}`}>
-                    {exp.highlights.map((highlight, i) => (
-                      <li key={i} className="flex flex-row items-start gap-3 max-w-md">
-                        <ChevronRight className={`w-5 h-5 text-blue-500/50 shrink-0 mt-0.5 ${index % 2 === 0 ? "md:hidden" : ""}`} />
-                        <span className={`text-sm text-zinc-400 ${index % 2 === 0 ? "md:text-right" : ""}`}>{highlight}</span>
-                        <ChevronRight className={`w-5 h-5 text-blue-500/50 shrink-0 mt-0.5 hidden ${index % 2 === 0 ? "md:block" : ""}`} />
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="flex items-center justify-between gap-4 mt-6">
+                    <button
+                      onClick={() => {
+                        globalThis.dispatchEvent(
+                          new CustomEvent("ask-bot", {
+                            detail: `Tell me more about your role as ${exp.role} at ${exp.company}.`,
+                          })
+                        );
+                        globalThis.dispatchEvent(
+                          new CustomEvent("highlight-item", {
+                            detail: { id: exp.id.toString(), type: "experience" },
+                          })
+                        );
+                      }}
+                      className="inline-flex items-center gap-2 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 rounded-lg border border-blue-500/20"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      Ask about this
+                    </button>
+                  </div>
                 </div>
               </div>
               

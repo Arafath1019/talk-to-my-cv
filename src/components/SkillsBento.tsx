@@ -1,9 +1,26 @@
 "use client";
 
 import { motion, Variants } from "framer-motion";
-import { Database, Server, Component, Cloud, BrainCircuit, Code } from "lucide-react";
+import { Database, Server, Component, Cloud, BrainCircuit, Code, MessageCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 
 export default function SkillsBento() {
+  const [highlightedType, setHighlightedType] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleHighlight = (e: Event) => {
+      const customEvent = e as CustomEvent<{ id: string; type: string }>;
+      if (customEvent.detail.type === "skill") {
+        setHighlightedType(customEvent.detail.id);
+        setTimeout(() => setHighlightedType(null), 3000);
+      }
+    };
+
+    globalThis.addEventListener("highlight-item", handleHighlight);
+    return () => globalThis.removeEventListener("highlight-item", handleHighlight);
+  }, []);
+
   const container: Variants = {
     hidden: { opacity: 0 },
     show: {
@@ -38,18 +55,44 @@ export default function SkillsBento() {
         className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[250px]"
       >
         {/* AI / Data Processing - Large spanning 2 cols */}
-        <motion.div variants={item} className="bento-card relative overflow-hidden group md:col-span-2 flex flex-col justify-end p-8">
+        <motion.div 
+          variants={item} 
+          className={cn(
+            "bento-card relative overflow-hidden group md:col-span-2 flex flex-col justify-end p-8 transition-all duration-500",
+            highlightedType === "ai" ? "ring-2 ring-blue-500 bg-blue-500/10 shadow-[0_0_30px_rgba(59,130,246,0.3)] scale-[1.01]" : ""
+          )}
+        >
           <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/10 rounded-full blur-[80px] -mr-20 -mt-20 z-0 transition-all duration-500 group-hover:bg-purple-500/20" />
           <BrainCircuit className="w-10 h-10 text-purple-400 mb-6 z-10" />
           <h3 className="text-2xl font-bold text-zinc-100 mb-2 z-10">AI & Data Processing</h3>
           <p className="text-zinc-400 z-10 max-w-md">
             Leveraging <strong className="text-zinc-200">Large Language Models (LLMs)</strong> for complex document data extraction systems. Expertise in Prompt Engineering and JSON Schema Design for AI outputs.
           </p>
+          <div className="mt-4 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={() => {
+                globalThis.dispatchEvent(
+                  new CustomEvent("ask-bot", {
+                    detail: "Tell me more about your AI & Data Processing experience.",
+                  })
+                );
+                globalThis.dispatchEvent(
+                  new CustomEvent("highlight-item", {
+                    detail: { id: "ai", type: "skill" },
+                  })
+                );
+              }}
+              className="inline-flex items-center gap-2 text-xs font-semibold text-purple-400 hover:text-purple-300 transition-colors bg-purple-500/10 hover:bg-purple-500/20 px-3 py-1.5 rounded-lg border border-purple-500/20"
+            >
+              <MessageCircle className="w-3.5 h-3.5" />
+              Ask about this
+            </button>
+          </div>
         </motion.div>
 
         {/* Backend & APIs */}
         <motion.div variants={item} className="bento-card relative overflow-hidden group flex flex-col p-8">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[40px] z-0 transition-all duration-500 group-hover:bg-blue-500/20" />
+          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl z-0 transition-all duration-500 group-hover:bg-blue-500/20" />
           <Server className="w-8 h-8 text-blue-400 mb-auto z-10" />
           <div className="z-10 mt-6">
             <h3 className="text-xl font-bold text-zinc-100 mb-2">Backend Dev</h3>
@@ -59,7 +102,7 @@ export default function SkillsBento() {
 
         {/* Cloud & DevOps */}
         <motion.div variants={item} className="bento-card relative overflow-hidden group flex flex-col p-8">
-          <div className="absolute bottom-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-[40px] z-0 transition-all duration-500 group-hover:bg-orange-500/20" />
+          <div className="absolute bottom-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full blur-2xl z-0 transition-all duration-500 group-hover:bg-orange-500/20" />
           <Cloud className="w-8 h-8 text-orange-400 mb-auto z-10" />
           <div className="z-10 mt-6">
             <h3 className="text-xl font-bold text-zinc-100 mb-2">Cloud Engine</h3>
@@ -76,6 +119,26 @@ export default function SkillsBento() {
             <p className="text-zinc-400">
               Building dynamic, highly interactive web experiences with <strong className="text-zinc-200">ReactJS, NextJS</strong>, and Tailwind CSS.
             </p>
+            <div className="mt-4 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={() => {
+                  globalThis.dispatchEvent(
+                    new CustomEvent("ask-bot", {
+                      detail: "What is your experience with React and Next.js?",
+                    })
+                  );
+                  globalThis.dispatchEvent(
+                    new CustomEvent("highlight-item", {
+                      detail: { id: "frontend", type: "skill" },
+                    })
+                  );
+                }}
+                className="inline-flex items-center gap-2 text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition-colors bg-cyan-500/10 hover:bg-cyan-500/20 px-3 py-1.5 rounded-lg border border-cyan-500/20"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                Ask about this
+              </button>
+            </div>
           </div>
           <div className="z-10 hidden md:grid grid-cols-2 gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
             {["React", "Next.js", "Redux", "Sass"].map((skill) => (
