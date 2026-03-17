@@ -1,19 +1,33 @@
-'use client';
+"use client";
 
-import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, User, Bot, Loader2, MinusCircle } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import React, { useState, useRef, useEffect } from "react";
+import {
+  MessageCircle,
+  X,
+  Send,
+  User,
+  Bot,
+  Loader2,
+  MinusCircle,
+  Trash2,
+  Download,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+import {
+  loadChatHistory,
+  saveChatHistory,
+  clearChatHistory,
+  exportChatHistory,
+  type Message,
+} from "@/lib/chat-storage";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
+// Local Message interface is now imported from @/lib/chat-storage
 
 const SUGGESTED_QUESTIONS = [
   "What are your top skills?",
@@ -22,38 +36,113 @@ const SUGGESTED_QUESTIONS = [
   "Where did you graduate from?",
 ];
 
+import { checkSessionLimit, recordMessage } from "@/lib/rate-limit";
+
+// Constants for rate limiting (ideally these would be NEXT_PUBLIC_ env vars)
+const MAX_MESSAGES = 20;
+const WINDOW_HOURS = 1;
+const COOLDOWN_SECONDS = 5;
+
 export default function Chatbot() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+
+  // Load chat history on mount
+  useEffect(() => {
+    const history = loadChatHistory();
+    if (history.length > 0) {
+      setMessages(history);
+    }
+  }, []);
+
+  // Save chat history whenever messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      saveChatHistory(messages);
+    }
+  }, [messages]);
+
+  // Rate limiting state
+  const [remaining, setRemaining] = useState(MAX_MESSAGES);
+  const [cooldown, setCooldown] = useState(0);
+  const [isBlocked, setIsBlocked] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
 
+  // Initial and periodic limit check
+  useEffect(() => {
+    const updateLimits = () => {
+      const result = checkSessionLimit(
+        MAX_MESSAGES,
+        WINDOW_HOURS,
+        COOLDOWN_SECONDS,
+      );
+      setRemaining(result.remaining);
+
+      if (result.reason === "cooldown" && result.cooldownSeconds) {
+        setCooldown(result.cooldownSeconds);
+      } else {
+        setCooldown(0);
+      }
+
+      if (!result.allowed && result.reason === "limit_reached") {
+        setIsBlocked(true);
+      } else {
+        setIsBlocked(false);
+      }
+    };
+
+    updateLimits();
+    const interval = setInterval(updateLimits, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handleSend = async (text: string = input) => {
     if (!text.trim() || isLoading) return;
 
-    const userMessage: Message = { role: 'user', content: text };
+    // Client-side rate limit check before sending
+    const limitCheck = checkSessionLimit(
+      MAX_MESSAGES,
+      WINDOW_HOURS,
+      COOLDOWN_SECONDS,
+    );
+    if (!limitCheck.allowed) {
+      if (limitCheck.reason === "cooldown") {
+        setError(
+          `Please wait ${limitCheck.cooldownSeconds} seconds before your next message.`,
+        );
+      } else {
+        setError(
+          "You've reached your message limit. Please try again later or email me at arafath.yeasin1019@gmail.com",
+        );
+      }
+      return;
+    }
+
+    const userMessage: Message = { role: "user", content: text };
     setMessages((prev) => [...prev, userMessage]);
-    setInput('');
+    setInput("");
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
+      const response = await fetch("/api/chat", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           messages: [...messages, userMessage],
@@ -62,18 +151,30 @@ export default function Chatbot() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to get response');
+        throw new Error(errorData.error || "Failed to get response");
       }
 
       const data = await response.json();
       const assistantMessage: Message = {
-        role: 'assistant',
+        role: "assistant",
         content: data.message.content,
       };
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Record successful message
+      recordMessage();
+      const updatedLimit = checkSessionLimit(
+        MAX_MESSAGES,
+        WINDOW_HOURS,
+        COOLDOWN_SECONDS,
+      );
+      setRemaining(updatedLimit.remaining);
     } catch (err: unknown) {
-      console.error('Chat error:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Something went wrong. Please check your API key.';
+      console.error("Chat error:", err);
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please check your API key.";
       setError(errorMessage);
     } finally {
       setIsLoading(false);
@@ -83,6 +184,20 @@ export default function Chatbot() {
   const toggleChat = () => {
     setIsOpen(!isOpen);
     setIsMinimized(false);
+  };
+
+  const handleClearChat = () => {
+    setShowConfirmDelete(true);
+  };
+
+  const confirmDelete = () => {
+    setMessages([]);
+    clearChatHistory();
+    setShowConfirmDelete(false);
+  };
+
+  const handleExportChat = () => {
+    exportChatHistory(messages);
   };
 
   return (
@@ -95,23 +210,48 @@ export default function Chatbot() {
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             className={cn(
               "bg-zinc-950/90 border border-zinc-800 shadow-2xl rounded-2xl overflow-hidden flex flex-col mb-4 transition-all duration-300",
-              isMinimized ? "h-14 w-64" : "h-[500px] w-[350px] md:w-[400px] backdrop-blur-xl"
+              isMinimized
+                ? "h-14 w-64"
+                : "h-[500px] w-[350px] md:w-[400px] backdrop-blur-xl",
             )}
           >
             {/* Header */}
             <div className="p-4 border-b border-zinc-800 bg-zinc-900/50 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                <span className="font-semibold text-zinc-100 text-sm">Ask Yeasin AI</span>
+                <div className="flex flex-col">
+                  <span className="font-semibold text-zinc-100 text-sm">
+                    Ask Yeasin AI
+                  </span>
+                  <span className="text-[10px] text-zinc-500">
+                    {remaining} messages left
+                  </span>
+                </div>
               </div>
               <div className="flex items-center gap-1">
-                <button 
+                <button
+                  onClick={handleExportChat}
+                  disabled={messages.length === 0}
+                  title="Export Chat"
+                  className="p-1 hover:bg-zinc-800 rounded-md transition-colors text-zinc-400 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <Download size={16} />
+                </button>
+                <button
+                  onClick={handleClearChat}
+                  disabled={messages.length === 0}
+                  title="Clear Chat"
+                  className="p-1 hover:bg-zinc-800 rounded-md transition-colors text-zinc-400 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <Trash2 size={16} />
+                </button>
+                <button
                   onClick={() => setIsMinimized(!isMinimized)}
                   className="p-1 hover:bg-zinc-800 rounded-md transition-colors text-zinc-400"
                 >
                   <MinusCircle size={18} />
                 </button>
-                <button 
+                <button
                   onClick={() => setIsOpen(false)}
                   className="p-1 hover:bg-zinc-800 rounded-md transition-colors text-zinc-400"
                 >
@@ -119,6 +259,44 @@ export default function Chatbot() {
                 </button>
               </div>
             </div>
+
+            <AnimatePresence>
+              {showConfirmDelete && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="absolute inset-0 z-[110] flex items-center justify-center p-6 bg-zinc-950/80 backdrop-blur-md"
+                >
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl w-full max-w-[280px] text-center">
+                    <div className="bg-red-500/10 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Trash2 className="text-red-500" size={24} />
+                    </div>
+                    <h3 className="text-zinc-100 font-semibold mb-2">
+                      Clear Chat History?
+                    </h3>
+                    <p className="text-zinc-400 text-xs mb-6">
+                      This action cannot be undone. All your messages will be
+                      permanently deleted.
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setShowConfirmDelete(false)}
+                        className="flex-1 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={confirmDelete}
+                        className="flex-1 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-zinc-100 text-sm font-medium transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {!isMinimized && (
               <>
@@ -129,15 +307,21 @@ export default function Chatbot() {
                       <div className="bg-blue-500/10 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
                         <Bot className="text-blue-500" size={24} />
                       </div>
-                      <p className="text-zinc-300 font-medium mb-1 text-sm">Hi! I&apos;m Yeasin&apos;s AI assistant.</p>
-                      <p className="text-zinc-500 text-xs">Ask me anything about his skills, experience, or projects.</p>
-                      
+                      <p className="text-zinc-300 font-medium mb-1 text-sm">
+                        Hi! I&apos;m Yeasin&apos;s AI assistant.
+                      </p>
+                      <p className="text-zinc-500 text-xs">
+                        Ask me anything about his skills, experience, or
+                        projects.
+                      </p>
+
                       <div className="mt-6 flex flex-wrap gap-2 justify-center">
                         {SUGGESTED_QUESTIONS.map((q, i) => (
                           <button
                             key={`${q}-${i}`}
                             onClick={() => handleSend(q)}
-                            className="text-[11px] px-3 py-1.5 rounded-full border border-zinc-700 bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 transition-all text-left"
+                            disabled={isBlocked || cooldown > 0}
+                            className="text-[11px] px-3 py-1.5 rounded-full border border-zinc-700 bg-zinc-900/50 text-zinc-400 hover:text-zinc-200 hover:border-zinc-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-left"
                           >
                             {q}
                           </button>
@@ -151,22 +335,34 @@ export default function Chatbot() {
                       key={`${m.role}-${i}`}
                       className={cn(
                         "flex gap-3 text-sm",
-                        m.role === 'user' ? "flex-row-reverse" : "flex-row"
+                        m.role === "user" ? "flex-row-reverse" : "flex-row",
                       )}
                     >
-                      <div className={cn(
-                        "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-                        m.role === 'user' ? "bg-zinc-800" : "bg-blue-600/20 text-blue-500"
-                      )}>
-                        {m.role === 'user' ? <User size={14} /> : <Bot size={14} />}
+                      <div
+                        className={cn(
+                          "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                          m.role === "user"
+                            ? "bg-zinc-800"
+                            : "bg-blue-600/20 text-blue-500",
+                        )}
+                      >
+                        {m.role === "user" ? (
+                          <User size={14} />
+                        ) : (
+                          <Bot size={14} />
+                        )}
                       </div>
-                      <div className={cn(
-                        "max-w-[80%] p-3 rounded-2xl",
-                        m.role === 'user' 
-                          ? "bg-blue-600 text-white rounded-tr-none" 
-                          : "bg-zinc-900 text-zinc-200 border border-zinc-800 rounded-tl-none"
-                      )}>
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
+                      <div
+                        className={cn(
+                          "max-w-[80%] p-3 rounded-2xl",
+                          m.role === "user"
+                            ? "bg-blue-600 text-white rounded-tr-none"
+                            : "bg-zinc-900 text-zinc-200 border border-zinc-800 rounded-tl-none",
+                        )}
+                      >
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                          {m.content}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -177,14 +373,25 @@ export default function Chatbot() {
                         <Bot className="text-blue-500" size={14} />
                       </div>
                       <div className="bg-zinc-900 border border-zinc-800 p-3 rounded-2xl rounded-tl-none">
-                        <Loader2 className="animate-spin text-zinc-500" size={16} />
+                        <Loader2
+                          className="animate-spin text-zinc-500"
+                          size={16}
+                        />
                       </div>
                     </div>
                   )}
 
                   {error && (
-                    <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-lg text-red-500 text-xs text-center">
-                      {error}
+                    <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-lg text-red-500 text-xs text-center flex flex-col gap-2">
+                      <span>{error}</span>
+                      {isBlocked && (
+                        <a
+                          href="mailto:arafath.yeasin1019@gmail.com"
+                          className="underline font-semibold hover:text-red-400 transition-colors"
+                        >
+                          Send me an email instead
+                        </a>
+                      )}
                     </div>
                   )}
                   <div ref={messagesEndRef} />
@@ -199,19 +406,34 @@ export default function Chatbot() {
                     }}
                     className="flex gap-2"
                   >
-                    <input
-                      type="text"
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      placeholder="Type a message..."
-                      className="flex-1 bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500/50 placeholder:text-zinc-600"
-                    />
+                    {(() => {
+                      let placeholder = "Type a message...";
+                      if (isBlocked) placeholder = "Limit reached...";
+                      else if (cooldown > 0)
+                        placeholder = `Wait ${cooldown}s...`;
+                      return (
+                        <input
+                          type="text"
+                          value={input}
+                          onChange={(e) => setInput(e.target.value)}
+                          placeholder={placeholder}
+                          disabled={isBlocked || cooldown > 0}
+                          className="flex-1 bg-zinc-900/50 border border-zinc-800 rounded-xl px-4 py-2 text-sm text-zinc-200 focus:outline-none focus:ring-1 focus:ring-blue-500/50 placeholder:text-zinc-600 disabled:opacity-50"
+                        />
+                      );
+                    })()}
                     <button
                       type="submit"
-                      disabled={isLoading || !input.trim()}
-                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 rounded-xl transition-all shadow-lg shadow-blue-500/20"
+                      disabled={
+                        isLoading || !input.trim() || isBlocked || cooldown > 0
+                      }
+                      className="bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-800 disabled:text-zinc-500 disabled:opacity-50 disabled:cursor-not-allowed text-white px-3 rounded-xl transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center min-w-10"
                     >
-                      <Send size={18} />
+                      {cooldown > 0 ? (
+                        <span className="text-xs font-bold">{cooldown}</span>
+                      ) : (
+                        <Send size={18} />
+                      )}
                     </button>
                   </form>
                 </div>
@@ -227,7 +449,9 @@ export default function Chatbot() {
         onClick={toggleChat}
         className={cn(
           "w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300",
-          isOpen ? "bg-zinc-800 text-zinc-400 rotate-90" : "bg-blue-600 text-white"
+          isOpen
+            ? "bg-zinc-800 text-zinc-400 rotate-90"
+            : "bg-blue-600 text-white",
         )}
       >
         {isOpen ? <X size={28} /> : <MessageCircle size={28} />}
