@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #09090b; /* Zinc 950 */
+  --color-foreground: #fafafa; /* Zinc 50 */
+  
+  --color-primary: #3b82f6; /* Blue 500 */
+  --color-primary-foreground: #ffffff;
+  
+  --color-secondary: #27272a; /* Zinc 800 */
+  --color-secondary-foreground: #fafafa;
+  
+  --color-accent: #22d3ee; /* Cyan 400 */
+  --color-accent-foreground: #09090b;
+
+  --color-muted: #27272a; 
+  --color-muted-foreground: #a1a1aa; /* Zinc 400 */
+
+  --color-card: rgba(24, 24, 27, 0.4); /* Zinc 900 mostly transparent */
+  --color-card-border: rgba(255, 255, 255, 0.1);
+}
+
+@layer base {
+  * {
+    @apply border-[rgba(255,255,255,0.1)];
+  }
+  body {
+    @apply bg-background text-foreground tracking-tight;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    background-image: radial-gradient(circle at 50% -20%, rgba(59, 130, 246, 0.15), rgba(9, 9, 11, 1) 80%);
+    background-attachment: fixed;
+  }
+}
+
+/* Custom Scrollbar for a premium feel */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Bento Grid Card utility */
+.bento-card {
+  @apply bg-[var(--color-card)] border border-[var(--color-card-border)] rounded-3xl p-6 backdrop-blur-xl transition-all duration-300;
+}
+
+.bento-card:hover {
+  @apply border-[rgba(255,255,255,0.2)] bg-[rgba(39,39,42,0.6)] shadow-[0_8px_30px_rgb(0,0,0,0.12)];
+}
+
+/* Subtly animated gradient text */
+.text-gradient {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-300;
+}
