@@ -166,7 +166,7 @@ export const exportChatHistory = (messages: Message[]): void => {
     });
 
     // --- Footer Section ---
-    const totalPages = doc.internal.getNumberOfPages();
+    const totalPages = doc.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
       doc.setPage(i);
       doc.setFontSize(8);
