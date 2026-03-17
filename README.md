@@ -6,9 +6,12 @@ A modern, interactive portfolio website featuring an AI-powered chatbot that can
 
 - **AI Chatbot**: Integrated Ollama-powered assistant that knows everything about Yeasin's professional journey.
 - **Dynamic CV Integration**: The chatbot reads content directly from `Yeasin_Arafath_CUET_CV.md`.
+- **Chat Persistence**: Conversation history is automatically saved to `localStorage`, allowing you to resume later.
+- **PDF Export**: Export your chat session as a professionally formatted PDF for offline records.
 - **Modern UI/UX**: Built with Next.js 15, Tailwind CSS 4, and Framer Motion for smooth animations and a premium feel.
+- **Bento Grid Skills**: A visually stunning Bento grid layout showcasing technical expertise with categorized sections.
 - **Responsive Design**: Optimized for all devices, from desktop to mobile.
-- **Sectioned Content**: Clearly organized Hero, Experience, Skills (Bento grid), Projects, and Education sections.
+- **Rate Limiting**: Integrated security to manage API usage effectively.
 
 ## 🛠️ Tech Stack
 
@@ -16,8 +19,21 @@ A modern, interactive portfolio website featuring an AI-powered chatbot that can
 - **Styling**: [Tailwind CSS 4](https://tailwindcss.com)
 - **Animations**: [Framer Motion](https://www.framer.com/motion/)
 - **AI/LLM**: [Ollama SDK](https://ollama.com) (Gemma 3 4B Cloud)
+- **PDF Generation**: [jsPDF](https://github.com/parallax/jsPDF)
 - **Icons**: [Lucide React](https://lucide.dev)
 - **Language**: [TypeScript](https://www.typescriptlang.org)
+
+## 📁 Project Structure
+
+```text
+├── src/
+│   ├── app/            # Next.js App Router (pages & API routes)
+│   ├── components/     # React components (Chatbot, Bento Grid, etc.)
+│   ├── lib/            # Utility functions (Storage, Rate limiting, etc.)
+│   └── globals.css     # Global styles and Tailwind imports
+├── public/             # Static assets
+└── Yeasin_Arafath_CUET_CV.md # Source content for the AI
+```
 
 ## 📦 Getting Started
 
@@ -40,7 +56,7 @@ A modern, interactive portfolio website featuring an AI-powered chatbot that can
    ```
 
 3. Configure environment variables:
-   Create a `.env.local` file in the root directory and add your Ollama API key:
+   Create a `.env.local` file in the root directory and add your Ollama configuration:
    ```env
    OLLAMA_CLOUD_API_KEY=your_api_key_here
    OLLAMA_MODEL=gemma3:4b-cloud
