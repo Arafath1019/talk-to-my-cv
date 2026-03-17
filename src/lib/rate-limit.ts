@@ -14,7 +14,7 @@ export interface SessionLimitData {
 const STORAGE_KEY = 'chat_limit_data';
 
 export const getSessionLimitData = (): SessionLimitData => {
-  if (typeof window === 'undefined') return { count: 0, lastReset: Date.now(), lastMessageTime: 0 };
+  if (typeof globalThis.window === 'undefined') return { count: 0, lastReset: Date.now(), lastMessageTime: 0 };
   
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) {
@@ -27,7 +27,7 @@ export const getSessionLimitData = (): SessionLimitData => {
 };
 
 export const updateSessionLimitData = (data: SessionLimitData) => {
-  if (typeof window === 'undefined') return;
+  if (typeof globalThis.window === 'undefined') return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 };
 
@@ -49,6 +49,7 @@ export const checkSessionLimit = (
   if (now - data.lastReset > windowMs) {
     data.count = 0;
     data.lastReset = now;
+    updateSessionLimitData(data);
   }
 
   // Check cooldown

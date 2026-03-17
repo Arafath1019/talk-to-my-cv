@@ -28,6 +28,7 @@ import {
   type Message,
 } from "@/lib/chat-storage";
 import { checkSessionLimit, recordMessage } from "@/lib/rate-limit";
+import { RichMarkdown } from "./chat/RichMarkdown";
 
 const SECTION_QUESTIONS: Record<string, string[]> = {
   hero: [
@@ -137,6 +138,15 @@ export default function Chatbot({
       setIsLoading(true);
       setError(null);
 
+      // Record message immediately to update UI count
+      recordMessage();
+      const updatedLimit = checkSessionLimit(
+        MAX_MESSAGES,
+        WINDOW_HOURS,
+        COOLDOWN_SECONDS,
+      );
+      setRemaining(updatedLimit.remaining);
+
       try {
         const response = await fetch("/api/chat", {
           method: "POST",
@@ -160,14 +170,6 @@ export default function Chatbot({
           content: data.message.content,
         };
         setMessages((prev) => [...prev, assistantMessage]);
-
-        recordMessage();
-        const updatedLimit = checkSessionLimit(
-          MAX_MESSAGES,
-          WINDOW_HOURS,
-          COOLDOWN_SECONDS,
-        );
-        setRemaining(updatedLimit.remaining);
       } catch (err: unknown) {
         console.error("Chat error:", err);
         const errorMessage =
@@ -519,7 +521,14 @@ export default function Chatbot({
                       : "bg-zinc-900 text-zinc-200 border border-zinc-800 rounded-tl-none",
                   )}
                 >
-                  <p className="whitespace-pre-wrap">{m.content}</p>
+                  {m.role === "user" ? (
+                    <p className="whitespace-pre-wrap">{m.content}</p>
+                  ) : (
+                    <RichMarkdown
+                      content={m.content}
+                      onQuickAction={handleSend}
+                    />
+                  )}
                 </div>
               </motion.div>
             ))}

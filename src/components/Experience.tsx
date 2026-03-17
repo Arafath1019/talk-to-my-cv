@@ -11,7 +11,8 @@ const experiences = [
     role: "Senior Officer (Software) - IT Development Division",
     company: "Dutch-Bangla Bank PLC",
     period: "August 2025 - Present",
-    description: "Leading the development of AI-driven applications and robust backend systems for the banking sector.",
+    description:
+      "Leading the development of AI-driven applications and robust backend systems for the banking sector.",
     highlights: [
       "Developing Python-based AI applications using LLMs to extract data from Bank & CIB Statements, NIDs, and Invoices with dynamic JSON schemas.",
       "Architecting Java/Spring Boot backend systems connected to Oracle databases.",
@@ -22,7 +23,8 @@ const experiences = [
     role: "MTO (Software) - IT Development Division",
     company: "Dutch-Bangla Bank PLC",
     period: "August 2024 - August 2025",
-    description: "Contributed to core banking applications, focusing on scalable APIs and secure data pipelines.",
+    description:
+      "Contributed to core banking applications, focusing on scalable APIs and secure data pipelines.",
     highlights: [
       "Engineered backend systems with Node.js (Express & TypeScript) integrating PostgreSQL and NoSQL databases.",
       "Implemented security best practices including JWT role-based authentication.",
@@ -33,7 +35,8 @@ const experiences = [
     role: "Senior Software Engineer",
     company: "Bangladesh Japan Information & Technology (BJIT) Limited",
     period: "July 2024 - August 2024",
-    description: "Designed and optimized serverless cloud infrastructure on AWS.",
+    description:
+      "Designed and optimized serverless cloud infrastructure on AWS.",
     highlights: [
       "Developed serverless applications via AWS Lambda integrating DynamoDB and S3.",
       "Ensured visibility and traceability via logging in AWS CloudWatch.",
@@ -44,11 +47,12 @@ const experiences = [
     role: "Software Engineer",
     company: "Bangladesh Japan Information & Technology (BJIT) Limited",
     period: "April 2021 - June 2024",
-    description: "Full-stack development experience building high-performance web applications.",
+    description:
+      "Full-stack development experience building high-performance web applications.",
     highlights: [
       "Built dynamic client-side applications using React and Next.js.",
       "Implemented comprehensive state management with Redux and interactive data visualization with Chart.js.",
-      "Achieved 1st place in the Web Technology Training under BJIT Academy."
+      "Achieved 1st place in the Web Technology Training under BJIT Academy.",
     ],
   },
 ];
@@ -66,13 +70,14 @@ export default function Experience() {
     };
 
     globalThis.addEventListener("highlight-item", handleHighlight);
-    return () => globalThis.removeEventListener("highlight-item", handleHighlight);
+    return () =>
+      globalThis.removeEventListener("highlight-item", handleHighlight);
   }, []);
 
   return (
     <section id="experience" className="py-24 relative max-w-5xl mx-auto px-6">
       <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-blue-500/5 rounded-full blur-[100px] -z-10" />
-      
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -83,14 +88,15 @@ export default function Experience() {
           Professional <span className="text-gradient">Experience</span>
         </h2>
         <p className="text-zinc-400 text-lg max-w-2xl">
-          My journey transitioning from Full-Stack to AI and Cloud Engineering, building solutions for top-tier fintech environments.
+          My journey transitioning from Full-Stack to AI and Cloud Engineering,
+          building solutions for top-tier fintech environments.
         </p>
       </motion.div>
 
       <div className="relative border-l border-zinc-800/50 pl-8 ml-4 md:ml-0 md:pl-0 md:border-l-0">
         {/* Central timeline line for desktop view */}
         <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-px bg-zinc-800/50 -translate-x-1/2"></div>
-        
+
         <div className="space-y-16">
           {experiences.map((exp, index) => (
             <motion.div
@@ -106,49 +112,40 @@ export default function Experience() {
               {/* Timeline Dot */}
               <div className="absolute -left-[41px] md:left-1/2 md:-translate-x-1/2 mt-1.5 md:mt-0 w-5 h-5 rounded-full border-4 border-[#09090b] bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.5)] z-10" />
 
-              <div className={`flex-1 w-full ${index % 2 === 0 ? "md:text-right" : ""}`}>
-                <div className={cn(
-                  "bento-card relative overflow-hidden group transition-all duration-500",
-                  highlightedId === exp.id ? "ring-2 ring-blue-500 bg-blue-500/10 shadow-[0_0_30px_rgba(59,130,246,0.3)] scale-[1.02]" : ""
-                )}>
+              <div
+                className={`flex-1 w-full ${index % 2 === 0 ? "md:text-right" : ""}`}
+              >
+                <div
+                  className={cn(
+                    "bento-card relative overflow-hidden group transition-all duration-500",
+                    highlightedId === exp.id
+                      ? "ring-2 ring-blue-500 bg-blue-500/10 shadow-[0_0_30px_rgba(59,130,246,0.3)] scale-[1.02]"
+                      : "",
+                  )}
+                >
                   <div className="absolute inset-0 bg-linear-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                  
-                  <div className={`flex items-center gap-2 text-blue-400 text-sm font-medium mb-3 ${index % 2 === 0 ? "md:justify-end" : ""}`}>
+
+                  <div
+                    className={`flex items-center gap-2 text-blue-400 text-sm font-medium mb-3 ${index % 2 === 0 ? "md:justify-end" : ""}`}
+                  >
                     <Calendar className="w-4 h-4" />
                     {exp.period}
                   </div>
-                  
-                  <h3 className="text-xl font-bold text-zinc-100 mb-1">{exp.role}</h3>
-                  <div className={`flex items-center gap-2 text-zinc-300 font-medium mb-4 ${index % 2 === 0 ? "md:justify-end" : ""}`}>
+
+                  <h3 className="text-xl font-bold text-zinc-100 mb-1">
+                    {exp.role}
+                  </h3>
+                  <div
+                    className={`flex items-center gap-2 text-zinc-300 font-medium mb-4 ${index % 2 === 0 ? "md:justify-end" : ""}`}
+                  >
                     <Briefcase className="w-4 h-4 text-zinc-500" />
                     {exp.company}
                   </div>
-                  
+
                   <p className="text-zinc-400 mb-6">{exp.description}</p>
-                  
-                  <div className="flex items-center justify-between gap-4 mt-6">
-                    <button
-                      onClick={() => {
-                        globalThis.dispatchEvent(
-                          new CustomEvent("ask-bot", {
-                            detail: `Tell me more about your role as ${exp.role} at ${exp.company}.`,
-                          })
-                        );
-                        globalThis.dispatchEvent(
-                          new CustomEvent("highlight-item", {
-                            detail: { id: exp.id.toString(), type: "experience" },
-                          })
-                        );
-                      }}
-                      className="inline-flex items-center gap-2 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 rounded-lg border border-blue-500/20"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5" />
-                      Ask about this
-                    </button>
-                  </div>
                 </div>
               </div>
-              
+
               {/* Spacer for desktop alignment */}
               <div className="hidden md:block flex-1" />
             </motion.div>
