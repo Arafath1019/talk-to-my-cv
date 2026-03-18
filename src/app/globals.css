@@ -61,5 +61,13 @@
 
 /* Subtly animated gradient text */
 .text-gradient {
-  @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-300;
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-400 via-cyan-400 to-blue-400;
+  background-size: 200% auto;
+  animation: textGradient 3s ease infinite;
+}
+
+@keyframes textGradient {
+  to {
+    background-position: 200% center;
+  }
 }

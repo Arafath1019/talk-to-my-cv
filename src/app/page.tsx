@@ -119,10 +119,7 @@ export default function Home() {
               ))}
 
               <footer className="mt-20 py-8 border-t border-zinc-800/50 text-center text-zinc-500 text-sm">
-                <p>
-                  &copy; {new Date().getFullYear()} Yeasin Arafath. Crafted with
-                  Next.js & Tailwind CSS.
-                </p>
+                <p>&copy; {new Date().getFullYear()} Yeasin Arafath.</p>
               </footer>
             </div>
           </div>

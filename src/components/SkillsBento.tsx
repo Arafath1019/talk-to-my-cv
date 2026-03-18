@@ -135,7 +135,7 @@ export default function SkillsBento() {
           className="bento-card relative overflow-hidden group md:col-span-2 flex justify-between items-end p-8"
         >
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.05)_0%,transparent_70%)] z-0" />
-          <div className="z-10 max-w-sm">
+          <div className="z-10 max-w-xs">
             <Component className="w-10 h-10 text-cyan-400 mb-6" />
             <h3 className="text-2xl font-bold text-zinc-100 mb-2">
               Frontend Interfaces
